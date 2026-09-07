@@ -11,12 +11,14 @@ DEX_CHAIN = {
     "bsc": "bsc",
     "base": "base",
     "ethereum": "ethereum",
+    "robinhood": "robinhood",
 }
 BIRDEYE_CHAIN = {
     "solana": "solana",
     "bsc": "bsc",
     "base": "base",
     "ethereum": "ethereum",
+    "robinhood": "robinhood",
 }
 
 def _num(v, default=0.0):

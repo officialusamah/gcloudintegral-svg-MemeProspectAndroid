@@ -25,8 +25,8 @@ def score_token(
     s: PairSnapshot,
     previous: dict | None = None,
     security: dict | None = None,
-    min_liquidity: float = 10_000,
-    min_mcap: float = 200_000,
+    min_liquidity: float = 5_000,
+    min_mcap: float = 25_000,
     max_mcap: float = 30_000_000,
     max_age_minutes: int = 360,
 ) -> ScoreResult:
@@ -50,9 +50,11 @@ def score_token(
         warnings.append(f"Pair older than {max_age_minutes} min")
         hard_block = True
 
-    # Age: early enough to catch acceleration but not purely seconds-old.
-    if age_min <= 15:
-        score += 10; reasons.append("Very early pair")
+    # Age: prioritize the first hour while still avoiding blind seconds-old chasing.
+    if age_min <= 5:
+        score += 14; reasons.append("Fresh launch under 5 minutes")
+    elif age_min <= 15:
+        score += 13; reasons.append("Very early pair")
     elif age_min <= 60:
         score += 12; reasons.append("Young pair")
     elif age_min <= 180:
@@ -60,16 +62,20 @@ def score_token(
     elif age_min <= 360:
         score += 3
 
-    # Market cap.
+    # Market cap: expanded downward to catch PONS-style breakouts before $500K.
     mc = s.market_cap
-    if 500_000 <= mc <= 10_000_000:
-        score += 14; reasons.append("Prime early market-cap range")
-    elif 200_000 <= mc < 500_000:
-        score += 7; reasons.append("Micro-cap")
+    if 100_000 <= mc < 250_000:
+        score += 16; reasons.append("Ultra-early market-cap sweet spot")
+    elif 250_000 <= mc < 500_000:
+        score += 14; reasons.append("Early micro-cap")
+    elif 25_000 <= mc < 100_000:
+        score += 12; reasons.append("Very small market cap")
+    elif 500_000 <= mc <= 10_000_000:
+        score += 12; reasons.append("Prime early market-cap range")
     elif 10_000_000 < mc <= 30_000_000:
-        score += 8; reasons.append("Mid-cap with room to expand")
+        score += 7; reasons.append("Mid-cap with room to expand")
 
-    # Liquidity quality.
+    # Liquidity quality. Ultra-early mode permits $5K+ but still rewards depth.
     if s.liquidity_usd >= 100_000:
         score += 12; reasons.append("Strong liquidity")
     elif s.liquidity_usd >= 50_000:
@@ -77,7 +83,9 @@ def score_token(
     elif s.liquidity_usd >= 25_000:
         score += 7
     elif s.liquidity_usd >= 10_000:
-        score += 3
+        score += 4
+    elif s.liquidity_usd >= 5_000:
+        score += 2
 
     lm = _ratio(s.liquidity_usd, mc) if mc else 0
     if lm >= 0.10:
@@ -108,6 +116,21 @@ def score_token(
         score += 4; reasons.append("High 5m transaction count")
     elif tx5 >= 50:
         score += 2
+
+    # Ultra-early breakout profile: only award when several independent signals agree.
+    ultra_early = (
+        age_min <= 60
+        and 25_000 <= mc <= 500_000
+        and s.liquidity_usd >= 5_000
+        and lm >= 0.05
+        and vol_liq >= 0.5
+        and tx5 >= 30
+        and buy_ratio >= 1.5
+        and 3 <= s.price_change_m5 <= 80
+    )
+    if ultra_early:
+        score += 10
+        reasons.append("Ultra-early breakout profile")
 
     # Momentum: reward meaningful move, penalize extremely late chase.
     if 5 <= s.price_change_m5 <= 45:
