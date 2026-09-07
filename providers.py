@@ -174,6 +174,24 @@ class MarketProviders:
             raw=p,
         )
 
+    async def solana_wallet_balance(self, address: str, rpc_url: str = "https://api.mainnet-beta.solana.com") -> float:
+        """Read the public SOL balance. This method cannot sign or send transactions."""
+        if not address:
+            return 0.0
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getBalance",
+            "params": [address, {"commitment": "confirmed"}],
+        }
+        r = await self.client.post(rpc_url, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        if data.get("error"):
+            raise RuntimeError(str(data["error"]))
+        lamports = int(((data.get("result") or {}).get("value")) or 0)
+        return lamports / 1_000_000_000
+
     async def security(self, chain: str, address: str) -> dict | None:
         if not self.birdeye_api_key or chain not in BIRDEYE_CHAIN:
             return None

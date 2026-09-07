@@ -16,6 +16,7 @@ Commands:
 /performance — performance of recent prospect alerts
 /positions — open paper positions
 /paperstats — paper trader P/L summary
+/wallet — connected Solana wallet + SOL balance
 /help — show this help"""
 
 def score_icon(score: int) -> str:
@@ -149,6 +150,9 @@ async def command_loop(tg: Telegram, scanner: Scanner, cfg: Config, store: Store
                         f"🟢🚀 Upgrade alerts: ON\n"
                         f"🚀 Rapid acceleration: ON\n"
                         f"📊 Alert tracking: ON\n\n"
+                        f"<b>👛 Wallet</b>\n"
+                        f"Connected: {'YES' if cfg.wallet_public_address else 'NO'}\n"
+                        f"Live trading: OFF (safety lock)\n\n"
                         f"<b>🧪 Paper Trader</b>\n"
                         f"Status: {'ON' if cfg.paper_trade_enabled else 'OFF'}\n"
                         f"Trading universe: {paper_chain}\n"
@@ -184,6 +188,38 @@ async def command_loop(tg: Telegram, scanner: Scanner, cfg: Config, store: Store
                                 f"Liq ${float(r['liquidity_usd'] or 0):,.0f}"
                             )
                         await tg.send("\n".join(lines))
+
+                elif cmd == "/wallet":
+                    if not cfg.wallet_public_address:
+                        await tg.send(
+                            "<b>👛 Wallet</b>\nNo wallet public address is configured."
+                        )
+                    else:
+                        try:
+                            sol = await market.solana_wallet_balance(
+                                cfg.wallet_public_address, cfg.solana_rpc_url
+                            )
+                            short = (
+                                cfg.wallet_public_address[:6]
+                                + "…"
+                                + cfg.wallet_public_address[-6:]
+                            )
+                            await tg.send(
+                                f"<b>👛 Solana Wallet</b>\n"
+                                f"Address: <code>{html.escape(cfg.wallet_public_address)}</code>\n"
+                                f"Short: <b>{html.escape(short)}</b>\n"
+                                f"SOL balance: <b>{sol:.6f} SOL</b>\n"
+                                f"Live trading: <b>OFF</b> 🔒\n"
+                                f"Paper trading: <b>{'ON' if cfg.paper_trade_enabled else 'OFF'}</b>\n\n"
+                                f"ℹ️ This connection is read-only. The bot has no private key and cannot move funds."
+                            )
+                        except Exception:
+                            await tg.send(
+                                "<b>👛 Solana Wallet</b>\n"
+                                f"Address: <code>{html.escape(cfg.wallet_public_address)}</code>\n"
+                                "Balance check failed temporarily.\n"
+                                "Live trading remains <b>OFF</b> 🔒"
+                            )
 
                 elif cmd == "/performance":
                     await tg.send(fmt_performance(store.recent_performance(5)))
