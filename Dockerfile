@@ -7,8 +7,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /app/data
+RUN mkdir -p app data && \
+    mv __init__.py config.py db.py main.py models.py providers.py scanner.py scoring.py telegram.py app/
 
-ENV PYTHONPATH=/
+ENV PYTHONPATH=/app
 
 CMD ["python", "-m", "app.main"]
