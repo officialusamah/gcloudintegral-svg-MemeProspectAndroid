@@ -22,6 +22,13 @@ def score_icon(score: int) -> str:
         return "🟡"
     return "🔴"
 
+def score_label(score: int) -> str:
+    if score >= 85:
+        return "STRONG PROSPECT"
+    if score >= 60:
+        return "EARLY WATCH"
+    return "LOW SCORE"
+
 def fmt_top(items):
     if not items:
         return "No candidates stored yet."
@@ -29,7 +36,8 @@ def fmt_top(items):
     for i, x in enumerate(items[:5], 1):
         s, r = x.snapshot, x.result
         lines.append(
-            f"{i}. {score_icon(r.score)} <b>{html.escape(s.token_symbol)}</b> — {r.score}/100 | "
+            f"{i}. {score_icon(r.score)} <b>{html.escape(s.token_symbol)}</b> — "
+            f"{r.score}/100 ({score_label(r.score)}) | "
             f"MC ${s.market_cap:,.0f} | Liq ${s.liquidity_usd:,.0f} | "
             f"5m {s.price_change_m5:+.1f}%"
         )
@@ -60,29 +68,31 @@ async def command_loop(tg: Telegram, scanner: Scanner, cfg: Config, store: Store
                         await tg.send("This scanner is already paired to another chat.", chat_id)
                     continue
 
-                # Ignore all commands from chats other than the paired chat.
                 if not tg.accept_chat(chat_id):
                     continue
 
                 if cmd == "/help":
                     await tg.send(HELP)
+
                 elif cmd == "/status":
                     source = "Birdeye new listings + DEX Screener" if cfg.birdeye_api_key else "DEX Screener fallback only"
                     ago = int(time.time()) - scanner.last_scan_ts if scanner.last_scan_ts else None
                     await tg.send(
                         f"<b>Scanner status</b>\n"
                         f"Interval: {cfg.scan_interval_seconds}s\n"
-                        f"Early watch: 🟡 {cfg.early_watch_threshold}/100\n"
-                        f"Strong prospect: 🟢 {cfg.alert_score_threshold}/100\n"
+                        f"🟡 Early Watch: 60/100\n"
+                        f"🟢 Strong Prospect: 85/100\n"
                         f"Chains: {', '.join(cfg.chains)}\n"
                         f"Discovery: {source}\n"
                         f"Last scan: {ago if ago is not None else 'not yet'}s ago\n"
                         f"Last candidate count: {scanner.last_count}"
                     )
+
                 elif cmd == "/scan":
                     await tg.send("🔎 Running a scan now…")
                     top = await scanner.run_once(send_alerts=True)
                     await tg.send(fmt_top(top))
+
                 elif cmd == "/top":
                     rows = store.latest_top(5)
                     if not rows:
@@ -90,12 +100,15 @@ async def command_loop(tg: Telegram, scanner: Scanner, cfg: Config, store: Store
                     else:
                         lines = ["<b>Latest stored scores</b>"]
                         for i, r in enumerate(rows, 1):
+                            score = int(r["score"])
                             lines.append(
-                                f"{i}. {score_icon(int(r['score']))} <b>{html.escape(str(r['token_symbol']))}</b> — "
-                                f"{r['score']}/100 | MC ${float(r['market_cap'] or 0):,.0f} | "
+                                f"{i}. {score_icon(score)} <b>{html.escape(str(r['token_symbol']))}</b> — "
+                                f"{score}/100 ({score_label(score)}) | "
+                                f"MC ${float(r['market_cap'] or 0):,.0f} | "
                                 f"Liq ${float(r['liquidity_usd'] or 0):,.0f}"
                             )
                         await tg.send("\n".join(lines))
+
         except Exception as e:
             print("telegram polling error:", repr(e))
             await asyncio.sleep(5)
@@ -103,7 +116,7 @@ async def command_loop(tg: Telegram, scanner: Scanner, cfg: Config, store: Store
 async def main():
     cfg = Config()
     if not cfg.telegram_bot_token:
-        raise SystemExit("Missing TELEGRAM_BOT_TOKEN. Copy .env.example to .env and add your BotFather token.")
+        raise SystemExit("Missing TELEGRAM_BOT_TOKEN.")
 
     store = Store(cfg.db_path)
     market = MarketProviders(cfg.birdeye_api_key)
@@ -112,8 +125,10 @@ async def main():
 
     print("Meme Prospect Telegram Bot starting")
     print(f"interval={cfg.scan_interval_seconds}s threshold={cfg.alert_score_threshold} chains={cfg.chains}")
+
     if not cfg.birdeye_api_key:
-        print("WARNING: BIRDEYE_API_KEY missing; fresh-launch coverage is limited to DEX Screener fallback feeds.")
+        print("WARNING: BIRDEYE_API_KEY missing; fresh-launch coverage is limited.")
+
     if not tg.chat_id:
         print("Telegram chat not paired yet. Send /start to your bot after it starts.")
 
