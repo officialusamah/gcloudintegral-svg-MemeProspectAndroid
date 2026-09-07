@@ -7,6 +7,7 @@ from .models import Candidate, PairSnapshot, ScoreResult
 from .providers import MarketProviders
 from .scoring import score_token
 from .telegram import Telegram, alert_message, paper_buy_message, paper_sell_message
+from .live import LiveTrader
 
 @dataclass
 class ScanItem:
@@ -39,6 +40,7 @@ class Scanner:
         self.store = store
         self.market = market
         self.telegram = telegram
+        self.live = LiveTrader(cfg, store, market, telegram)
         self.lock = asyncio.Lock()
         self.last_scan_ts = 0
         self.last_count = 0
@@ -162,6 +164,12 @@ class Scanner:
                         key,
                         Candidate(chain=key[0], address=key[1], source="paper_position"),
                     )
+            for p in self.live.open_positions():
+                key = (str(p["chain"]), str(p["token_address"]))
+                by_key.setdefault(
+                    key,
+                    Candidate(chain=key[0], address=key[1], source="live_position"),
+                )
             candidates = list(by_key.values())
             self.last_count = len(candidates)
 
@@ -203,8 +211,9 @@ class Scanner:
                 self.store.save_snapshot(snap, result)
                 results.append(ScanItem(snap, result))
 
-                # Paper trader operates independently of Telegram prospect-alert cooldowns.
+                # Paper and live engines operate independently of alert cooldowns.
                 await self._paper_manage(snap, result)
+                await self.live.manage(snap, result)
 
                 previous_alert_score = int(alert_before["last_score"]) if alert_before else None
                 upgraded_to_green = (
