@@ -107,7 +107,7 @@ def fmt_paperstats(summary):
         "ℹ️ Simulation only — no wallet funds are used."
     )
 
-async def command_loop(tg: Telegram, scanner: Scanner, cfg: Config, store: Store):
+async def command_loop(tg: Telegram, scanner: Scanner, cfg: Config, store: Store, market: MarketProviders):
     while True:
         try:
             updates = await tg.updates()
@@ -254,7 +254,7 @@ async def main():
         print("Telegram chat not paired yet. Send /start to your bot after it starts.")
 
     try:
-        await asyncio.gather(scanner.loop(), command_loop(tg, scanner, cfg, store))
+        await asyncio.gather(scanner.loop(), command_loop(tg, scanner, cfg, store, market))
     finally:
         await market.close()
         await tg.close()
